@@ -668,14 +668,24 @@ a{text-decoration:none;color:inherit}
 // ════════════════════════════════════════════════════════════
 //  FIREBASE CONFIG — PASTE YOUR CREDENTIALS HERE
 // ════════════════════════════════════════════════════════════
-const firebaseConfig = {
-  apiKey: "AIzaSyC6QCdXwLpnwLyuoU8hGBtMRfd6H8EoAKU",
-  authDomain: "taxsnap-canada.firebaseapp.com",
-  projectId: "taxsnap-canada",
-  storageBucket: "taxsnap-canada.firebasestorage.app",
-  messagingSenderId: "120358760764",
-  appId: "1:120358760764:web:af10dac0fef507147aee39"
-};
+// Import the functions you need from the SDKs you need
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-app.js";
+  // TODO: Add SDKs for Firebase products that you want to use
+  // https://firebase.google.com/docs/web/setup#available-libraries
+
+  // Your web app's Firebase configuration
+  const firebaseConfig = {
+    apiKey: "AIzaSyC6QCdXwLpnwLyuoU8hGBtMRfd6H8EoAKU",
+    authDomain: "taxsnap-canada.firebaseapp.com",
+    databaseURL: "https://taxsnap-canada-default-rtdb.firebaseio.com",
+    projectId: "taxsnap-canada",
+    storageBucket: "taxsnap-canada.firebasestorage.app",
+    messagingSenderId: "120358760764",
+    appId: "1:120358760764:web:af10dac0fef507147aee39"
+  };
+
+  // Initialize Firebase
+  const app = initializeApp(firebaseConfig);
 
 // ════════════════════════════════════════════════════════════
 //  CANADIAN TAX RATES (2024)
@@ -1220,5 +1230,6 @@ document.addEventListener('DOMContentLoaded',init);
 </script>
 </body>
 </html>
+
 
 
