@@ -1,0 +1,1222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>TaxSnap 🍁 Canadian Tax Receipt Manager</title>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --primary:#0f172a;--primary-mid:#1e3a5f;--primary-blue:#2563eb;--primary-light:#3b82f6;
+  --primary-lighter:#dbeafe;--primary-pale:#eff6ff;
+  --red:#dc2626;--red-light:#fecaca;--red-pale:#fef2f2;
+  --green:#059669;--green-light:#d1fae5;--green-dark:#047857;
+  --amber:#d97706;--amber-light:#fef3c7;
+  --bg:#f8fafc;--card:#ffffff;--card-hover:#fafbfc;
+  --text:#0f172a;--text2:#475569;--text3:#94a3b8;--text4:#cbd5e1;
+  --border:#e2e8f0;--border-light:#f1f5f9;
+  --shadow:0 1px 3px rgba(0,0,0,.06),0 1px 2px rgba(0,0,0,.04);
+  --shadow-md:0 4px 12px rgba(0,0,0,.08);
+  --shadow-lg:0 12px 24px rgba(0,0,0,.12);
+  --shadow-xl:0 20px 40px rgba(0,0,0,.15);
+  --r:14px;--r-sm:10px;--r-xs:6px;
+  --nav-h:68px;--head-h:60px;
+  --safe-b:env(safe-area-inset-bottom,0px);
+  --transition:all .2s ease;
+}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
+  background:var(--bg);color:var(--text);line-height:1.55;
+  -webkit-font-smoothing:antialiased;overflow-x:hidden;
+  padding-bottom:calc(var(--nav-h) + var(--safe-b) + 12px);
+}
+input,select,textarea,button{font-family:inherit;font-size:inherit}
+img{max-width:100%;display:block}
+a{text-decoration:none;color:inherit}
+
+/* HEADER */
+.header{
+  position:sticky;top:0;z-index:100;
+  background:linear-gradient(135deg,var(--primary) 0%,var(--primary-mid) 100%);
+  color:#fff;padding:0 20px;height:var(--head-h);
+  display:flex;align-items:center;justify-content:space-between;
+  box-shadow:0 2px 20px rgba(0,0,0,.15);
+}
+.h-brand{display:flex;align-items:center;gap:10px}
+.h-brand .logo{font-size:1.5rem}
+.h-brand .name{font-size:1.15rem;font-weight:800;letter-spacing:-.3px}
+.h-brand .badge{
+  background:var(--red);font-size:.6rem;padding:2px 7px;
+  border-radius:10px;font-weight:700;letter-spacing:.5px;margin-top:-8px;
+}
+.h-actions{display:flex;gap:6px}
+.h-btn{
+  background:rgba(255,255,255,.12);border:none;color:#fff;
+  width:38px;height:38px;border-radius:50%;cursor:pointer;
+  font-size:1.1rem;display:flex;align-items:center;justify-content:center;
+  transition:var(--transition);
+}
+.h-btn:hover{background:rgba(255,255,255,.22)}
+
+/* FIREBASE STATUS */
+.fb-status{
+  padding:8px 20px;font-size:.78rem;text-align:center;font-weight:600;
+  display:none;transition:var(--transition);
+}
+.fb-status.warn{background:var(--amber-light);color:var(--amber);display:block}
+.fb-status.ok{background:var(--green-light);color:var(--green);display:block}
+
+/* BOTTOM NAV */
+.bnav{
+  position:fixed;bottom:0;left:0;right:0;z-index:100;
+  background:var(--card);border-top:1px solid var(--border);
+  display:flex;padding-bottom:var(--safe-b);
+  box-shadow:0 -4px 20px rgba(0,0,0,.06);
+}
+.bnav-item{
+  flex:1;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;padding:8px 0 6px;gap:3px;cursor:pointer;
+  color:var(--text3);border:none;background:none;
+  font-size:.65rem;font-weight:600;transition:var(--transition);
+  -webkit-tap-highlight-color:transparent;letter-spacing:.2px;
+}
+.bnav-item .ico{font-size:1.35rem;line-height:1;transition:var(--transition)}
+.bnav-item.active{color:var(--primary-blue)}
+.bnav-item.active .ico{transform:scale(1.1)}
+.bnav-item.scan-btn{position:relative;top:-16px;color:#fff}
+.bnav-item.scan-btn .ico{
+  background:linear-gradient(135deg,var(--red) 0%,#e11d48 100%);
+  width:54px;height:54px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  font-size:1.6rem;box-shadow:0 6px 20px rgba(220,38,38,.35);
+  transition:var(--transition);
+}
+.bnav-item.scan-btn:active .ico{transform:scale(.9)}
+
+/* VIEWS */
+.view{display:none;padding:20px;max-width:680px;margin:0 auto;animation:fadeUp .3s ease}
+.view.active{display:block}
+@keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+
+/* PAGE HEADER */
+.pg-head{margin-bottom:20px}
+.pg-head h2{font-size:1.4rem;font-weight:800;letter-spacing:-.3px;display:flex;align-items:center;gap:8px}
+.pg-head p{color:var(--text2);font-size:.85rem;margin-top:2px}
+
+/* STAT CARDS */
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:24px}
+.stat{
+  background:var(--card);border-radius:var(--r);padding:18px;
+  box-shadow:var(--shadow);position:relative;overflow:hidden;
+  border:1px solid var(--border-light);transition:var(--transition);
+}
+.stat:hover{box-shadow:var(--shadow-md);transform:translateY(-1px)}
+.stat::after{content:'';position:absolute;top:0;left:0;right:0;height:3px;border-radius:var(--r) var(--r) 0 0}
+.stat.s1::after{background:var(--primary-blue)}.stat.s2::after{background:var(--red)}
+.stat.s3::after{background:var(--green)}.stat.s4::after{background:var(--amber)}
+.stat .s-ico{font-size:1.5rem;margin-bottom:8px}
+.stat .s-val{font-size:1.6rem;font-weight:800;line-height:1.2;letter-spacing:-.5px}
+.stat .s-lbl{font-size:.72rem;color:var(--text2);font-weight:600;text-transform:uppercase;letter-spacing:.4px;margin-top:2px}
+
+/* SECTION */
+.sec{margin-bottom:24px}
+.sec-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+.sec-head h3{font-size:1.05rem;font-weight:700;display:flex;align-items:center;gap:6px}
+.sec-link{color:var(--primary-blue);font-size:.82rem;font-weight:600;cursor:pointer;border:none;background:none}
+
+/* CARD */
+.card{
+  background:var(--card);border-radius:var(--r);
+  box-shadow:var(--shadow);border:1px solid var(--border-light);
+  overflow:hidden;transition:var(--transition);
+}
+.card:hover{box-shadow:var(--shadow-md)}
+.card-body{padding:18px}
+
+/* PROVINCE BAR */
+.prov-row{display:flex;align-items:center;gap:12px;padding:6px 0}
+.prov-code{width:30px;font-weight:700;font-size:.85rem;color:var(--primary-mid);flex-shrink:0}
+.prov-track{flex:1;height:10px;background:var(--bg);border-radius:5px;overflow:hidden}
+.prov-fill{height:100%;border-radius:5px;background:linear-gradient(90deg,var(--primary-blue),var(--primary-light));transition:width .8s ease}
+.prov-val{width:70px;text-align:right;font-weight:600;font-size:.8rem;color:var(--text2)}
+
+/* RECEIPT CARD */
+.rc{
+  background:var(--card);border-radius:var(--r);padding:14px 16px;
+  box-shadow:var(--shadow);display:flex;gap:14px;
+  margin-bottom:10px;cursor:pointer;transition:var(--transition);
+  border:1px solid var(--border-light);position:relative;
+}
+.rc:hover{box-shadow:var(--shadow-md);border-color:var(--primary-lighter)}
+.rc:active{transform:scale(.985)}
+.rc-thumb{
+  width:56px;height:56px;border-radius:var(--r-sm);overflow:hidden;
+  flex-shrink:0;background:var(--bg);display:flex;align-items:center;
+  justify-content:center;font-size:1.5rem;
+}
+.rc-thumb img{width:100%;height:100%;object-fit:cover}
+.rc-info{flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center}
+.rc-store{font-weight:700;font-size:.92rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rc-meta{font-size:.75rem;color:var(--text2);margin-top:2px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.rc-meta .dot{width:3px;height:3px;border-radius:50%;background:var(--text4)}
+.rc-right{text-align:right;flex-shrink:0;display:flex;flex-direction:column;align-items:flex-end;justify-content:center;gap:3px}
+.rc-total{font-weight:800;font-size:1rem}
+.rc-tax{font-size:.73rem;color:var(--green);font-weight:600}
+.rc-badge{
+  font-size:.6rem;background:var(--primary-lighter);color:var(--primary-blue);
+  padding:2px 7px;border-radius:4px;font-weight:700;letter-spacing:.3px;
+}
+
+/* EMPTY STATE */
+.empty{text-align:center;padding:50px 24px;color:var(--text2)}
+.empty .e-ico{font-size:3.5rem;margin-bottom:16px;opacity:.4}
+.empty h3{font-size:1.1rem;margin-bottom:6px;color:var(--text)}
+.empty p{font-size:.85rem;max-width:280px;margin:0 auto}
+
+/* BUTTONS */
+.btn{
+  padding:11px 22px;border-radius:var(--r-sm);border:none;
+  font-weight:700;font-size:.85rem;cursor:pointer;
+  display:inline-flex;align-items:center;justify-content:center;gap:7px;
+  transition:var(--transition);-webkit-tap-highlight-color:transparent;
+  letter-spacing:.2px;
+}
+.btn:active{transform:scale(.96)}
+.btn-p{background:var(--primary-blue);color:#fff}
+.btn-p:hover{background:#1d4ed8}
+.btn-p:disabled{background:var(--text4);cursor:not-allowed;transform:none}
+.btn-s{background:var(--bg);color:var(--text);border:1.5px solid var(--border)}
+.btn-s:hover{background:var(--border)}
+.btn-r{background:var(--red);color:#fff}
+.btn-r:hover{background:#b91c1c}
+.btn-g{background:var(--green);color:#fff}
+.btn-g:hover{background:var(--green-dark)}
+.btn-o{background:transparent;color:var(--primary-blue);border:1.5px solid var(--primary-blue)}
+.btn-o:hover{background:var(--primary-pale)}
+.btn-d{background:var(--red-pale);color:var(--red)}
+.btn-d:hover{background:var(--red);color:#fff}
+.btn-block{width:100%}
+.btn-sm{padding:7px 14px;font-size:.78rem}
+.btn-xs{padding:5px 10px;font-size:.72rem;border-radius:var(--r-xs)}
+
+/* UPLOAD ZONE */
+.upload-zone{
+  background:var(--card);border:2.5px dashed var(--border);
+  border-radius:var(--r);padding:48px 24px;text-align:center;
+  cursor:pointer;transition:var(--transition);margin-bottom:16px;
+}
+.upload-zone:hover,.upload-zone.hover{border-color:var(--primary-blue);background:var(--primary-pale)}
+.upload-zone .u-ico{font-size:3rem;margin-bottom:12px}
+.upload-zone h3{font-size:1.05rem;margin-bottom:4px;font-weight:700}
+.upload-zone p{font-size:.82rem;color:var(--text2)}
+.upload-btns{display:flex;gap:12px;margin-top:20px;justify-content:center;flex-wrap:wrap}
+
+/* OCR PROGRESS */
+.ocr-prog{
+  background:var(--card);border-radius:var(--r);padding:32px 24px;
+  text-align:center;box-shadow:var(--shadow);margin-bottom:16px;
+  border:1px solid var(--border-light);display:none;
+}
+.ocr-prog.on{display:block}
+.prog-bar{width:100%;height:8px;background:var(--bg);border-radius:4px;overflow:hidden;margin:16px 0}
+.prog-fill{height:100%;border-radius:4px;background:linear-gradient(90deg,var(--primary-blue),var(--primary-light));transition:width .3s;width:0}
+.prog-txt{font-size:.82rem;color:var(--text2);font-weight:500}
+.spinner{
+  display:inline-block;width:32px;height:32px;
+  border:3px solid var(--border);border-top-color:var(--primary-blue);
+  border-radius:50%;animation:spin .7s linear infinite;margin-bottom:12px;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* PREVIEW */
+.preview{display:none;margin-bottom:16px}
+.preview.on{display:block}
+.preview-img{
+  background:var(--card);border-radius:var(--r);overflow:hidden;
+  box-shadow:var(--shadow);margin-bottom:16px;max-height:260px;
+  display:flex;align-items:center;justify-content:center;
+  border:1px solid var(--border-light);
+}
+.preview-img img{max-height:260px;object-fit:contain}
+
+/* CONFIDENCE */
+.conf{
+  background:var(--card);border-radius:var(--r);padding:14px 18px;
+  box-shadow:var(--shadow);margin-bottom:16px;display:flex;
+  align-items:center;gap:14px;border:1px solid var(--border-light);
+}
+.conf-dot{width:14px;height:14px;border-radius:50%;flex-shrink:0;box-shadow:0 0 0 3px rgba(0,0,0,.06)}
+.conf-dot.hi{background:var(--green)}.conf-dot.md{background:var(--amber)}.conf-dot.lo{background:var(--red)}
+.conf-info{flex:1}.conf-info strong{font-size:.88rem}.conf-info small{display:block;font-size:.75rem;color:var(--text2);margin-top:1px}
+.conf-pct{font-weight:800;font-size:1rem}
+
+/* FORM */
+.form-card{
+  background:var(--card);border-radius:var(--r);padding:24px;
+  box-shadow:var(--shadow);margin-bottom:16px;border:1px solid var(--border-light);
+}
+.form-card h3{font-size:1rem;margin-bottom:20px;display:flex;align-items:center;gap:8px;font-weight:700}
+.fg-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.fg{margin-bottom:0}
+.fg.full{grid-column:1/-1}
+.fg label{
+  display:block;font-size:.72rem;font-weight:700;color:var(--text2);
+  margin-bottom:5px;text-transform:uppercase;letter-spacing:.5px;
+}
+.fg input,.fg select,.fg textarea{
+  width:100%;padding:11px 14px;border:1.5px solid var(--border);
+  border-radius:var(--r-sm);font-size:.9rem;color:var(--text);
+  background:var(--bg);transition:var(--transition);outline:none;
+}
+.fg input:focus,.fg select:focus,.fg textarea:focus{border-color:var(--primary-blue);background:#fff;box-shadow:0 0 0 3px rgba(37,99,235,.1)}
+.fg textarea{resize:vertical;min-height:60px}
+.fg .prefix{position:relative}
+.fg .prefix::before{
+  content:'$';position:absolute;left:14px;top:50%;transform:translateY(-50%);
+  color:var(--text3);font-weight:600;font-size:.9rem;
+}
+.fg .prefix input{padding-left:28px}
+
+/* TAX SUMMARY BOX */
+.tax-box{
+  background:linear-gradient(135deg,var(--green-light) 0%,#ecfdf5 100%);
+  border-radius:var(--r-sm);padding:16px 18px;margin-top:4px;
+  border:1px solid rgba(5,150,105,.15);
+}
+.tax-row{display:flex;justify-content:space-between;font-size:.85rem;padding:4px 0}
+.tax-row.total{font-weight:800;border-top:1.5px solid rgba(5,150,105,.2);margin-top:6px;padding-top:8px;font-size:.95rem}
+.tax-row .note{font-size:.68rem;color:var(--amber);font-weight:600;font-style:italic}
+
+.form-actions{display:flex;gap:12px;margin-top:20px}
+
+/* RAW OCR */
+.ocr-toggle{
+  font-size:.78rem;color:var(--primary-blue);cursor:pointer;
+  background:none;border:none;font-weight:600;margin-top:8px;
+  display:inline-flex;align-items:center;gap:4px;
+}
+.ocr-raw{
+  background:var(--bg);border-radius:var(--r-sm);padding:14px;
+  font-family:'Courier New',monospace;font-size:.75rem;
+  white-space:pre-wrap;max-height:160px;overflow-y:auto;
+  margin-top:8px;display:none;color:var(--text2);
+  border:1px solid var(--border);
+}
+.ocr-raw.on{display:block}
+
+/* FILTERS */
+.filters{
+  background:var(--card);border-radius:var(--r);padding:16px 18px;
+  box-shadow:var(--shadow);margin-bottom:16px;border:1px solid var(--border-light);
+}
+.f-row{display:flex;gap:10px;flex-wrap:wrap;align-items:end}
+.f-group{flex:1;min-width:90px}
+.f-group label{display:block;font-size:.68rem;font-weight:700;color:var(--text2);margin-bottom:4px;text-transform:uppercase;letter-spacing:.4px}
+.f-group input,.f-group select{
+  width:100%;padding:8px 10px;border:1.5px solid var(--border);
+  border-radius:var(--r-xs);font-size:.8rem;background:var(--bg);outline:none;
+  transition:var(--transition);
+}
+.f-group input:focus,.f-group select:focus{border-color:var(--primary-blue)}
+.hist-bar{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+.result-ct{font-size:.82rem;color:var(--text2);font-weight:500}
+
+/* YEAR SELECTOR */
+.yr-sel{
+  display:inline-flex;align-items:center;gap:10px;background:var(--card);
+  padding:6px 14px;border-radius:24px;box-shadow:var(--shadow);
+  margin-bottom:18px;border:1px solid var(--border-light);
+}
+.yr-sel button{
+  width:30px;height:30px;border-radius:50%;border:none;background:var(--bg);
+  cursor:pointer;font-size:.85rem;display:flex;align-items:center;justify-content:center;
+  transition:var(--transition);font-weight:700;
+}
+.yr-sel button:hover{background:var(--primary-lighter);color:var(--primary-blue)}
+.yr-sel span{font-weight:800;font-size:1rem;min-width:50px;text-align:center}
+
+/* MODAL */
+.modal-bg{
+  display:none;position:fixed;inset:0;z-index:200;
+  background:rgba(0,0,0,.45);backdrop-filter:blur(4px);
+  -webkit-backdrop-filter:blur(4px);
+  align-items:flex-end;justify-content:center;
+}
+.modal-bg.on{display:flex}
+.modal{
+  background:var(--card);border-radius:var(--r) var(--r) 0 0;
+  width:100%;max-width:680px;max-height:88vh;overflow-y:auto;
+  animation:slideUp .35s ease;padding-bottom:var(--safe-b);
+}
+@keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
+.modal-bar{width:40px;height:4px;background:var(--text4);border-radius:2px;margin:12px auto 8px}
+.modal-head{display:flex;align-items:center;justify-content:space-between;padding:4px 24px 16px;border-bottom:1px solid var(--border)}
+.modal-head h3{font-size:1.1rem;font-weight:700}
+.modal-x{background:none;border:none;font-size:1.5rem;cursor:pointer;color:var(--text2);padding:4px;line-height:1;transition:var(--transition)}
+.modal-x:hover{color:var(--text)}
+.modal-body{padding:24px}
+.modal-foot{display:flex;gap:10px;padding:16px 24px;border-top:1px solid var(--border)}
+
+/* DETAIL */
+.d-img{border-radius:var(--r-sm);overflow:hidden;margin-bottom:20px;max-height:280px;display:flex;justify-content:center;background:var(--bg)}
+.d-img img{max-height:280px;object-fit:contain}
+.d-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px}
+.d-item label{font-size:.68rem;color:var(--text2);text-transform:uppercase;font-weight:700;letter-spacing:.4px}
+.d-item .val{font-size:1rem;font-weight:700;margin-top:2px}
+.d-item.full{grid-column:1/-1}
+
+.itc-box{
+  background:linear-gradient(135deg,var(--primary-pale),var(--primary-lighter));
+  border-radius:var(--r-sm);padding:14px 16px;border:1px solid rgba(37,99,235,.12);
+}
+.itc-box label{color:var(--primary-blue)!important}
+.itc-box .val{color:var(--primary-blue);font-size:1.15rem}
+.itc-note{font-size:.72rem;margin-top:3px;font-weight:500}
+
+/* SETTINGS */
+.set-group{
+  background:var(--card);border-radius:var(--r);padding:20px;
+  box-shadow:var(--shadow);margin-bottom:16px;border:1px solid var(--border-light);
+}
+.set-group h3{font-size:.95rem;margin-bottom:14px;display:flex;align-items:center;gap:8px;font-weight:700}
+.set-row{display:flex;justify-content:space-between;align-items:center;padding:11px 0;border-bottom:1px solid var(--border-light)}
+.set-row:last-child{border-bottom:none}
+.set-row .sl{font-size:.85rem;font-weight:500}
+.set-row .sv{font-size:.82rem;color:var(--text2);font-weight:500}
+
+/* TOOLTIP */
+.tip-btn{
+  display:inline-flex;align-items:center;gap:5px;color:var(--primary-blue);
+  cursor:pointer;font-size:.78rem;font-weight:600;background:none;border:none;
+}
+.tip-btn .q{
+  width:18px;height:18px;border-radius:50%;background:var(--primary-lighter);
+  color:var(--primary-blue);display:inline-flex;align-items:center;justify-content:center;
+  font-size:.65rem;font-weight:800;
+}
+.tip-box{
+  background:var(--card);border-radius:var(--r);padding:18px;
+  box-shadow:var(--shadow-lg);border:1px solid var(--border);
+  font-size:.83rem;line-height:1.65;margin-top:10px;display:none;
+}
+.tip-box.on{display:block}
+.tip-box h4{margin-bottom:8px;font-size:.92rem}
+.tip-box ul{padding-left:18px;margin:8px 0}
+.tip-box li{margin-bottom:5px}
+.tip-box .warn{color:var(--amber);font-weight:600;margin-top:10px}
+
+/* EDIT FORM IN MODAL */
+.edit-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.edit-grid .fg input,.edit-grid .fg select{padding:10px 12px;font-size:.88rem}
+.edit-grid .fg .prefix input{padding-left:26px}
+
+/* TOAST */
+.toast-wrap{
+  position:fixed;top:calc(var(--head-h) + 10px);left:50%;transform:translateX(-50%);
+  z-index:300;display:flex;flex-direction:column;gap:8px;pointer-events:none;
+}
+.toast{
+  background:var(--text);color:#fff;padding:12px 22px;border-radius:var(--r-sm);
+  font-size:.85rem;font-weight:600;box-shadow:var(--shadow-lg);
+  animation:toastIn .3s ease;white-space:nowrap;pointer-events:auto;
+}
+.toast.ok{background:var(--green)}.toast.err{background:var(--red)}.toast.warn{background:var(--amber)}
+@keyframes toastIn{from{opacity:0;transform:translateY(-12px)}to{opacity:1;transform:translateY(0)}}
+.toast.out{animation:toastOut .3s ease forwards}
+@keyframes toastOut{to{opacity:0;transform:translateY(-12px)}}
+
+.hidden{display:none!important}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}
+
+@media(min-width:480px){.stats{grid-template-columns:repeat(4,1fr)}}
+@media(min-width:640px){
+  .view{padding:28px}
+  .modal{border-radius:var(--r);margin:auto;max-height:82vh}
+  .modal-bg{align-items:center;padding:24px}
+}
+</style>
+</head>
+<body>
+
+<header class="header">
+  <div class="h-brand">
+    <span class="logo">🍁</span>
+    <span class="name">TaxSnap</span>
+    <span class="badge">CANADA</span>
+  </div>
+  <div class="h-actions">
+    <button class="h-btn" onclick="showTaxInfo()" title="Tax Guide">📘</button>
+    <button class="h-btn" onclick="go('settings')" title="Settings">⚙️</button>
+  </div>
+</header>
+
+<div id="fbStatus" class="fb-status"></div>
+<div class="toast-wrap" id="toastWrap"></div>
+
+<!-- ====== DASHBOARD ====== -->
+<div id="v-dashboard" class="view active">
+  <div class="pg-head">
+    <h2>📊 Dashboard</h2>
+    <p>Your Canadian tax receipt summary</p>
+  </div>
+  <div class="yr-sel">
+    <button onclick="chgYr(-1)">◀</button>
+    <span id="dashYr">2024</span>
+    <button onclick="chgYr(1)">▶</button>
+  </div>
+  <div class="stats">
+    <div class="stat s1"><div class="s-ico">🧾</div><div class="s-val" id="sRec">0</div><div class="s-lbl">Receipts</div></div>
+    <div class="stat s2"><div class="s-ico">💰</div><div class="s-val" id="sExp">$0</div><div class="s-lbl">Expenses</div></div>
+    <div class="stat s3"><div class="s-ico">🏛️</div><div class="s-val" id="sTax">$0</div><div class="s-lbl">Tax Paid</div></div>
+    <div class="stat s4"><div class="s-ico">📈</div><div class="s-val" id="sAvg">$0</div><div class="s-lbl">Average</div></div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-head">
+      <h3>🗺️ Province Breakdown</h3>
+      <button class="tip-btn" onclick="toggleTip('taxTip')"><span class="q">?</span> Tax Claims</button>
+    </div>
+    <div id="taxTip" class="tip-box">
+      <h4>🍁 Input Tax Credits (ITCs)</h4>
+      <p>If you're a GST/HST registrant, you can recover tax paid on business expenses:</p>
+      <ul>
+        <li><b>HST Provinces</b> (ON, NB, NS, NL, PE): Full HST claimable</li>
+        <li><b>GST-only</b> (AB, NT, NU, YT): 5% GST claimable</li>
+        <li><b>GST + PST</b> (BC, SK, MB): Only GST claimable; PST is <em>not</em> recoverable</li>
+        <li><b>Quebec</b>: GST as ITC; QST claimed separately on QC return</li>
+      </ul>
+      <p class="warn">⚠️ Keep original receipts. CRA requires them for ITCs over $30.</p>
+    </div>
+    <div class="card"><div class="card-body" id="provChart"><div class="empty" style="padding:20px"><p>Scan your first receipt to see data</p></div></div></div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-head"><h3>🕐 Recent Receipts</h3><button class="sec-link" onclick="go('history')">View All →</button></div>
+    <div id="recentList"><div class="empty"><div class="e-ico">🧾</div><h3>No receipts yet</h3><p>Tap the camera button to start scanning</p></div></div>
+  </div>
+</div>
+
+<!-- ====== SCANNER ====== -->
+<div id="v-scan" class="view">
+  <div class="pg-head">
+    <h2>📸 Scan Receipt</h2>
+    <p>Take a photo or upload a receipt image</p>
+  </div>
+  <div class="upload-zone" id="dropZone">
+    <div class="u-ico">📷</div>
+    <h3>Tap to upload or take photo</h3>
+    <p>JPG, PNG supported · OCR will extract details</p>
+    <div class="upload-btns">
+      <label class="btn btn-r">📷 Camera<input type="file" accept="image/*" capture="environment" id="camIn" class="sr-only"></label>
+      <label class="btn btn-s">📁 Choose File<input type="file" accept="image/*" id="fileIn" class="sr-only"></label>
+    </div>
+  </div>
+  <div class="ocr-prog" id="ocrProg">
+    <div class="spinner"></div>
+    <h3 style="font-size:1rem;font-weight:700">Scanning receipt...</h3>
+    <div class="prog-bar"><div class="prog-fill" id="progBar"></div></div>
+    <p class="prog-txt" id="progTxt">Initializing OCR...</p>
+  </div>
+  <div class="preview" id="prevSec">
+    <div class="preview-img"><img id="prevImg" alt="Preview"></div>
+    <div class="conf" id="confBar">
+      <div class="conf-dot" id="confDot"></div>
+      <div class="conf-info"><strong id="confLbl">Analyzing...</strong><small id="confDesc"></small></div>
+      <div class="conf-pct" id="confPct">--%</div>
+    </div>
+    <button class="ocr-toggle" onclick="document.getElementById('ocrRaw').classList.toggle('on')">📄 Toggle raw OCR text</button>
+    <pre class="ocr-raw" id="ocrRaw"></pre>
+
+    <div class="form-card" id="scanForm">
+      <h3>✏️ Review & Edit Details</h3>
+      <div class="fg-grid">
+        <div class="fg full"><label>Store / Merchant</label><input type="text" id="fStore" placeholder="e.g. Shoppers Drug Mart"></div>
+        <div class="fg"><label>Receipt Date</label><input type="date" id="fDate"></div>
+        <div class="fg"><label>Province</label><select id="fProv" onchange="calcTax()"></select></div>
+        <div class="fg"><label>Total (incl. tax)</label><div class="prefix"><input type="number" step="0.01" min="0" id="fTotal" placeholder="0.00" oninput="calcTax()"></div></div>
+        <div class="fg"><label>Subtotal (before tax)</label><div class="prefix"><input type="number" step="0.01" min="0" id="fSub" placeholder="Auto" oninput="calcFromSub()"></div></div>
+        <div class="fg"><label>Category</label><select id="fCat">
+          <option value="general">General</option><option value="office">Office Supplies</option>
+          <option value="meals">Meals & Entertainment</option><option value="travel">Travel</option>
+          <option value="vehicle">Vehicle & Gas</option><option value="utilities">Utilities & Phone</option>
+          <option value="professional">Professional Services</option><option value="equipment">Equipment</option>
+          <option value="other">Other</option>
+        </select></div>
+        <div class="fg"><label>HST/GST Override</label><div class="prefix"><input type="number" step="0.01" min="0" id="fTaxOverride" placeholder="Auto-calc" title="Manually set tax amount"></div></div>
+        <div class="fg full"><label>Notes</label><textarea id="fNotes" rows="2" placeholder="Optional notes..."></textarea></div>
+        <div class="fg full">
+          <div class="tax-box" id="taxBox">
+            <div class="tax-row" id="tr1"><span>GST (5%)</span><span>$0.00</span></div>
+            <div class="tax-row" id="tr2" style="display:none"><span>PST</span><span>$0.00</span></div>
+            <div class="tax-row total" id="trT"><span>Total Tax</span><span>$0.00</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-s" onclick="resetScan()" style="flex:1">✕ Cancel</button>
+        <button class="btn btn-g" onclick="saveReceipt()" style="flex:2" id="saveBtn">💾 Save Receipt</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ====== HISTORY ====== -->
+<div id="v-history" class="view">
+  <div class="pg-head"><h2>📋 Receipt History</h2><p>All your scanned receipts</p></div>
+  <div class="filters">
+    <div class="f-row">
+      <div class="f-group"><label>From</label><input type="date" id="filtFrom" onchange="applyFilt()"></div>
+      <div class="f-group"><label>To</label><input type="date" id="filtTo" onchange="applyFilt()"></div>
+      <div class="f-group"><label>Province</label><select id="filtProv" onchange="applyFilt()"><option value="">All</option></select></div>
+      <div class="f-group"><label>Category</label><select id="filtCat" onchange="applyFilt()">
+        <option value="">All</option><option value="general">General</option><option value="office">Office</option>
+        <option value="meals">Meals</option><option value="travel">Travel</option><option value="vehicle">Vehicle</option>
+        <option value="utilities">Utilities</option><option value="professional">Professional</option>
+        <option value="equipment">Equipment</option><option value="other">Other</option>
+      </select></div>
+    </div>
+  </div>
+  <div class="hist-bar">
+    <span class="result-ct" id="resCt">0 receipts</span>
+    <button class="btn btn-o btn-sm" onclick="exportCSV()">📥 Export CSV</button>
+  </div>
+  <div id="histList"><div class="empty"><div class="e-ico">📋</div><h3>No receipts</h3><p>Scan receipts to see them here</p></div></div>
+</div>
+
+<!-- ====== SETTINGS ====== -->
+<div id="v-settings" class="view">
+  <div class="pg-head"><h2>⚙️ Settings</h2><p>Configure your preferences</p></div>
+  <div class="set-group"><h3>🏠 Default Province</h3><div class="fg" style="margin:0"><select id="setProv" onchange="saveSets()"></select></div></div>
+  <div class="set-group"><h3>🔥 Firebase</h3>
+    <div class="set-row"><span class="sl">Connection</span><span class="sv" id="fbTxt">Not configured</span></div>
+    <div class="set-row"><span class="sl">Storage</span><span class="sv" id="stTxt">Local Storage</span></div>
+    <p style="font-size:.75rem;color:var(--text3);margin-top:10px">Update the FIREBASE_CONFIG in source code to enable cloud sync.</p>
+  </div>
+  <div class="set-group"><h3>🍁 Tax Rates</h3><div id="ratesTable"></div></div>
+  <div class="set-group"><h3>🗑️ Data</h3><button class="btn btn-d btn-block" onclick="clearAll()">Clear All Local Data</button></div>
+</div>
+
+<!-- ====== BOTTOM NAV ====== -->
+<nav class="bnav">
+  <button class="bnav-item active" onclick="go('dashboard')" data-v="dashboard"><span class="ico">📊</span><span>Home</span></button>
+  <button class="bnav-item" onclick="go('history')" data-v="history"><span class="ico">📋</span><span>History</span></button>
+  <button class="bnav-item scan-btn" onclick="go('scan')" data-v="scan"><span class="ico">📷</span><span></span></button>
+  <button class="bnav-item" onclick="showTaxInfo()" data-v="info"><span class="ico">📘</span><span>Guide</span></button>
+  <button class="bnav-item" onclick="go('settings')" data-v="settings"><span class="ico">⚙️</span><span>Settings</span></button>
+</nav>
+
+<!-- ====== RECEIPT DETAIL MODAL ====== -->
+<div class="modal-bg" id="detailModal">
+  <div class="modal">
+    <div class="modal-bar"></div>
+    <div class="modal-head"><h3 id="detailTitle">Receipt Details</h3><button class="modal-x" onclick="closeM('detailModal')">✕</button></div>
+    <div class="modal-body" id="detailBody"></div>
+    <div class="modal-foot" id="detailFoot"></div>
+  </div>
+</div>
+
+<!-- ====== EDIT MODAL ====== -->
+<div class="modal-bg" id="editModal">
+  <div class="modal">
+    <div class="modal-bar"></div>
+    <div class="modal-head"><h3>✏️ Edit Receipt</h3><button class="modal-x" onclick="closeM('editModal')">✕</button></div>
+    <div class="modal-body" id="editBody"></div>
+    <div class="modal-foot" id="editFoot"></div>
+  </div>
+</div>
+
+<!-- ====== TAX INFO MODAL ====== -->
+<div class="modal-bg" id="taxModal">
+  <div class="modal">
+    <div class="modal-bar"></div>
+    <div class="modal-head"><h3>🍁 Canadian Tax Guide</h3><button class="modal-x" onclick="closeM('taxModal')">✕</button></div>
+    <div class="modal-body">
+      <div style="background:var(--primary-lighter);padding:16px;border-radius:var(--r-sm);margin-bottom:14px;border:1px solid rgba(37,99,235,.1)">
+        <strong style="color:var(--primary-mid)">HST (Harmonized Sales Tax)</strong>
+        <p style="font-size:.84rem;margin-top:4px;color:var(--text2)">Combined tax in ON (13%), NB, NS, NL, PE (15%). Full HST claimable as ITC.</p>
+      </div>
+      <div style="background:var(--green-light);padding:16px;border-radius:var(--r-sm);margin-bottom:14px;border:1px solid rgba(5,150,105,.1)">
+        <strong style="color:var(--green-dark)">GST — 5% Federal</strong>
+        <p style="font-size:.84rem;margin-top:4px;color:var(--text2)">Applies everywhere. Always claimable as ITC for registered businesses.</p>
+      </div>
+      <div style="background:var(--amber-light);padding:16px;border-radius:var(--r-sm);margin-bottom:14px;border:1px solid rgba(217,119,6,.1)">
+        <strong style="color:var(--amber)">PST (Provincial)</strong>
+        <p style="font-size:.84rem;margin-top:4px;color:var(--text2)">BC 7%, SK 6%, MB 7%. PST is <b>not</b> recoverable on federal return.</p>
+      </div>
+      <div style="background:var(--red-pale);padding:16px;border-radius:var(--r-sm);margin-bottom:14px;border:1px solid rgba(220,38,38,.08)">
+        <strong style="color:var(--red)">QST — 9.975% (Quebec)</strong>
+        <p style="font-size:.84rem;margin-top:4px;color:var(--text2)">Claimed as ITR on Quebec return, separate from federal GST ITC.</p>
+      </div>
+      <h4 style="margin:18px 0 10px;font-size:.95rem">📌 Filing Tips</h4>
+      <ul style="font-size:.84rem;padding-left:20px;color:var(--text2);line-height:1.8">
+        <li>Keep originals for all business expenses</li>
+        <li>CRA requires receipts for ITCs over $30</li>
+        <li>Meals & entertainment: only 50% claimable</li>
+        <li>File GST/HST return quarterly or annually</li>
+        <li>Use CSV export to simplify your filing</li>
+      </ul>
+      <p style="font-size:.74rem;color:var(--text3);margin-top:18px;font-style:italic">⚠️ This is a tool, not tax advice. Visit <b>canada.ca/taxes</b> or consult a professional.</p>
+    </div>
+  </div>
+</div>
+
+<script>
+// ════════════════════════════════════════════════════════════
+//  FIREBASE CONFIG — PASTE YOUR CREDENTIALS HERE
+// ════════════════════════════════════════════════════════════
+const FB_CONFIG = {
+  apiKey:            "YOUR_API_KEY_HERE",
+  authDomain:        "YOUR_PROJECT.firebaseapp.com",
+  projectId:         "YOUR_PROJECT_ID_HERE",
+  storageBucket:     "YOUR_PROJECT.appspot.com",
+  messagingSenderId: "YOUR_SENDER_ID_HERE",
+  appId:             "YOUR_APP_ID_HERE"
+};
+
+// ════════════════════════════════════════════════════════════
+//  CANADIAN TAX RATES (2024)
+// ════════════════════════════════════════════════════════════
+const PROV = {
+  AB:{name:"Alberta",gst:5,pst:0,hst:0,qst:0,type:"GST",lbl:"GST 5%"},
+  BC:{name:"British Columbia",gst:5,pst:7,hst:0,qst:0,type:"GST+PST",lbl:"GST 5% + PST 7%"},
+  MB:{name:"Manitoba",gst:5,pst:7,hst:0,qst:0,type:"GST+PST",lbl:"GST 5% + PST 7%"},
+  NB:{name:"New Brunswick",gst:0,pst:0,hst:15,qst:0,type:"HST",lbl:"HST 15%"},
+  NL:{name:"Newfoundland & Labrador",gst:0,pst:0,hst:15,qst:0,type:"HST",lbl:"HST 15%"},
+  NT:{name:"Northwest Territories",gst:5,pst:0,hst:0,qst:0,type:"GST",lbl:"GST 5%"},
+  NS:{name:"Nova Scotia",gst:0,pst:0,hst:15,qst:0,type:"HST",lbl:"HST 15%"},
+  NU:{name:"Nunavut",gst:5,pst:0,hst:0,qst:0,type:"GST",lbl:"GST 5%"},
+  ON:{name:"Ontario",gst:0,pst:0,hst:13,qst:0,type:"HST",lbl:"HST 13%"},
+  PE:{name:"Prince Edward Island",gst:0,pst:0,hst:15,qst:0,type:"HST",lbl:"HST 15%"},
+  QC:{name:"Quebec",gst:5,pst:0,hst:0,qst:9.975,type:"GST+QST",lbl:"GST 5% + QST 9.975%"},
+  SK:{name:"Saskatchewan",gst:5,pst:6,hst:0,qst:0,type:"GST+PST",lbl:"GST 5% + PST 6%"},
+  YT:{name:"Yukon",gst:5,pst:0,hst:0,qst:0,type:"GST",lbl:"GST 5%"}
+};
+const CAT_LBL={general:"General",office:"Office Supplies",meals:"Meals & Entertainment",travel:"Travel",vehicle:"Vehicle & Gas",utilities:"Utilities & Phone",professional:"Professional Services",equipment:"Equipment",other:"Other"};
+
+// ════════════════════════════════════════════════════════════
+//  STATE
+// ════════════════════════════════════════════════════════════
+let S={receipts:[],yr:new Date().getFullYear(),fbOk:false,imgData:null,sets:{defProv:'ON'}};
+let db=null,store=null;
+
+// ════════════════════════════════════════════════════════════
+//  UTILITIES
+// ════════════════════════════════════════════════════════════
+const r2=n=>Math.round(n*100)/100;
+const $=id=>document.getElementById(id);
+const esc=s=>{const d=document.createElement('div');d.textContent=s;return d.innerHTML};
+const fmt=n=>'$'+(n||0).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g,',');
+const fmtD=d=>{if(!d)return'N/A';return new Date(d+'T00:00:00').toLocaleDateString('en-CA',{month:'short',day:'numeric',year:'numeric'})};
+
+function toast(msg,type=''){
+  const t=document.createElement('div');t.className='toast '+(type||'');t.textContent=msg;
+  $('toastWrap').appendChild(t);
+  setTimeout(()=>{t.classList.add('out');setTimeout(()=>t.remove(),300)},3000);
+}
+
+function openM(id){$(id).classList.add('on');document.body.style.overflow='hidden'}
+function closeM(id){$(id).classList.remove('on');document.body.style.overflow=''}
+function showTaxInfo(){openM('taxModal')}
+function toggleTip(id){$(id).classList.toggle('on')}
+
+function go(v){
+  document.querySelectorAll('.view').forEach(e=>e.classList.remove('active'));
+  $('v-'+v)?.classList.add('active');
+  document.querySelectorAll('.bnav-item').forEach(n=>n.classList.toggle('active',n.dataset.v===v));
+  if(v==='dashboard')refreshDash();if(v==='history')refreshHist();
+}
+
+async function mkThumb(url,sz){
+  return new Promise(r=>{
+    const i=new Image();i.onload=()=>{
+      const c=document.createElement('canvas');
+      const ratio=Math.min(sz/i.width,sz/i.height,1);
+      c.width=i.width*ratio;c.height=i.height*ratio;
+      c.getContext('2d').drawImage(i,0,0,c.width,c.height);
+      r(c.toDataURL('image/jpeg',.6));
+    };i.src=url;
+  });
+}
+
+// ════════════════════════════════════════════════════════════
+//  FIREBASE
+// ════════════════════════════════════════════════════════════
+function initFB(){
+  const ok=FB_CONFIG.apiKey&&!FB_CONFIG.apiKey.includes('YOUR_');
+  const el=$('fbStatus');
+  if(ok){
+    try{
+      firebase.initializeApp(FB_CONFIG);db=firebase.firestore();store=firebase.storage();S.fbOk=true;
+      el.textContent='🔥 Firebase connected';el.className='fb-status ok';
+      $('fbTxt').textContent='Connected ✓';$('stTxt').textContent='Firebase Cloud';
+      setTimeout(()=>el.className='fb-status',3000);
+    }catch(e){
+      el.textContent='⚠️ Firebase error — local mode';el.className='fb-status warn';
+      $('fbTxt').textContent='Error';
+    }
+  }else{
+    el.textContent='💾 Local storage mode — add Firebase config for cloud sync';el.className='fb-status warn';
+    $('fbTxt').textContent='Not configured';$('stTxt').textContent='Browser Local Storage';
+    setTimeout(()=>el.className='fb-status',5000);
+  }
+}
+
+// ════════════════════════════════════════════════════════════
+//  DATA SERVICE
+// ════════════════════════════════════════════════════════════
+const Data={
+  async load(){
+    if(S.fbOk){try{const snap=await db.collection('receipts').orderBy('dateUploaded','desc').get();S.receipts=snap.docs.map(d=>({id:d.id,...d.data()}));}catch(e){this._ll()}}else this._ll();
+    return S.receipts;
+  },
+  _ll(){try{S.receipts=JSON.parse(localStorage.getItem('ts_r')||'[]')}catch(e){S.receipts=[]}},
+  _sl(){try{localStorage.setItem('ts_r',JSON.stringify(S.receipts))}catch(e){toast('Storage full!','warn')}},
+
+  async save(r){
+    if(S.fbOk){
+      try{
+        if(r.imageData?.startsWith('data:')){
+          const ref=store.ref(`receipts/${Date.now()}_${Math.random().toString(36).substr(2,9)}.jpg`);
+          await ref.putString(r.imageData,'data_url');r.imageUrl=await ref.getDownloadURL();delete r.imageData;
+        }
+        const doc=await db.collection('receipts').add(r);r.id=doc.id;
+      }catch(e){toast('Cloud save failed — saved locally','warn');r.id='l_'+Date.now();S.receipts.unshift(r);this._sl();return r}
+    }else{
+      r.id='l_'+Date.now();
+      if(r.imageData){r.imageThumb=await mkThumb(r.imageData,200);try{if(JSON.stringify([...S.receipts,r]).length>4e6)delete r.imageData}catch(e){delete r.imageData}}
+    }
+    S.receipts.unshift(r);if(!S.fbOk)this._sl();return r;
+  },
+
+  async update(id,data){
+    const idx=S.receipts.findIndex(r=>r.id===id);
+    if(idx===-1)return;
+    Object.assign(S.receipts[idx],data);
+    if(S.fbOk){try{await db.collection('receipts').doc(id).update(data)}catch(e){toast('Cloud update failed','warn')}}
+    if(!S.fbOk)this._sl();
+    return S.receipts[idx];
+  },
+
+  async del(id){
+    if(S.fbOk){try{await db.collection('receipts').doc(id).delete()}catch(e){}}
+    S.receipts=S.receipts.filter(r=>r.id!==id);if(!S.fbOk)this._sl();
+  },
+
+  clear(){S.receipts=[];localStorage.removeItem('ts_r');if(S.fbOk)toast('Local cleared. Firebase data remains.','warn')}
+};
+
+// ════════════════════════════════════════════════════════════
+//  TAX CALCULATOR
+// ════════════════════════════════════════════════════════════
+const Tax={
+  rate(pc){const p=PROV[pc];if(!p)return{tot:5,gst:5,pst:0,qst:0,hst:0};return{tot:p.hst||(p.gst+p.pst+p.qst),gst:p.gst,pst:p.pst,qst:p.qst,hst:p.hst}},
+  fromTotal(total,pc){
+    const p=PROV[pc];if(!p)return{sub:total,gst:0,pst:0,qst:0,hst:0,tax:0,type:'GST',rate:5};
+    const rt=this.rate(pc).tot;const sub=total/(1+rt/100);
+    let g=0,ps=0,q=0,h=0;
+    if(p.type==='HST')h=total-sub;else{g=sub*(p.gst/100);ps=sub*(p.pst/100);q=sub*(p.qst/100)}
+    return{sub:r2(sub),gst:r2(g),pst:r2(ps),qst:r2(q),hst:r2(h),tax:r2(total-sub),type:p.type,rate:rt};
+  },
+  fromSub(sub,pc){
+    const p=PROV[pc];if(!p)return{total:sub,gst:0,pst:0,qst:0,hst:0,tax:0};
+    let g=0,ps=0,q=0,h=0;
+    if(p.type==='HST')h=sub*(p.hst/100);else{g=sub*(p.gst/100);ps=sub*(p.pst/100);q=sub*(p.qst/100)}
+    const tax=h+g+ps+q;return{total:r2(sub+tax),gst:r2(g),pst:r2(ps),qst:r2(q),hst:r2(h),tax:r2(tax)};
+  },
+  itc(r){const p=PROV[r.province];if(!p)return 0;if(p.type==='HST')return r.hstAmount||r.taxAmount||0;return r.gstAmount||0}
+};
+
+// ════════════════════════════════════════════════════════════
+//  OCR
+// ════════════════════════════════════════════════════════════
+const OCR={
+  async run(src){
+    const pb=$('progBar'),pt=$('progTxt');
+    try{
+      const w=await Tesseract.createWorker('eng',1,{logger:m=>{
+        if(m.status==='recognizing text'){const p=Math.round(m.progress*100);pb.style.width=p+'%';pt.textContent=`Reading text… ${p}%`}
+        else pt.textContent=m.status||'Processing…';
+      }});
+      pt.textContent='Analyzing…';pb.style.width='30%';
+      const{data}=await w.recognize(src);await w.terminate();
+      return this.parse(data.text,data.confidence);
+    }catch(e){return{raw:'',store:'',total:0,tax:0,date:'',conf:0,found:{}}}
+  },
+  parse(txt,ocrConf){
+    const R={raw:txt,store:'',total:0,sub:0,tax:0,gst:0,pst:0,qst:0,hst:0,date:'',conf:0,found:{}};
+    const lines=txt.split('\n').map(l=>l.trim()).filter(l=>l);
+
+    // Store
+    for(let i=0;i<Math.min(lines.length,5);i++){
+      const l=lines[i].replace(/[^a-zA-Z0-9\s&'.-]/g,'').trim();
+      if(l.length>2&&!/^\d+$/.test(l)&&!/^(tel|ph|fax|www|http|date|time|receipt|trans)/i.test(l)){R.store=l.substring(0,50);R.found.store=true;break}
+    }
+
+    // Total
+    const tp=[/(?:GRAND\s*)?TOTAL\s*[:\s$]*\$?\s*(\d+[.,]\d{2})/i,/AMOUNT\s*(?:DUE|OWING)\s*[:\s$]*\$?\s*(\d+[.,]\d{2})/i,/BALANCE\s*(?:DUE)?\s*[:\s$]*\$?\s*(\d+[.,]\d{2})/i,/(?:VISA|MC|MASTER|DEBIT|CREDIT|AMEX|INTERAC)\s*[:\s$]*\$?\s*(\d+[.,]\d{2})/i];
+    for(const p of tp){const m=txt.match(p);if(m){R.total=parseFloat(m[1].replace(',','.'));R.found.total=true;break}}
+    if(!R.found.total){const a=[];let m;const rx=/\$?\s*(\d+[.,]\d{2})\b/g;while((m=rx.exec(txt))!==null)a.push(parseFloat(m[1].replace(',','.')));if(a.length){R.total=Math.max(...a);R.found.total=true}}
+
+    // Subtotal
+    const sm=txt.match(/SUB\s*-?\s*TOTAL\s*[:\s$]*\$?\s*(\d+[.,]\d{2})/i);if(sm)R.sub=parseFloat(sm[1].replace(',','.'));
+
+    // Tax
+    const hm=txt.match(/HST\s*[:\s$@]*\$?\s*(\d+[.,]\d{2})/i);
+    const gm=txt.match(/GST\s*[:\s$@]*\$?\s*(\d+[.,]\d{2})/i);
+    const pm=txt.match(/PST\s*[:\s$@]*\$?\s*(\d+[.,]\d{2})/i);
+    const qm=txt.match(/(?:QST|TVQ)\s*[:\s$@]*\$?\s*(\d+[.,]\d{2})/i);
+    const tm=txt.match(/(?:^|\s)TAX\s*[:\s$]*\$?\s*(\d+[.,]\d{2})/im);
+    if(hm){R.hst=parseFloat(hm[1].replace(',','.'));R.found.tax=true}
+    if(gm){R.gst=parseFloat(gm[1].replace(',','.'));R.found.tax=true}
+    if(pm){R.pst=parseFloat(pm[1].replace(',','.'));R.found.tax=true}
+    if(qm){R.qst=parseFloat(qm[1].replace(',','.'));R.found.tax=true}
+    if(!R.found.tax&&tm){R.tax=parseFloat(tm[1].replace(',','.'));R.found.tax=true}
+    if(R.found.tax&&R.tax===0)R.tax=R.hst+R.gst+R.pst+R.qst;
+
+    // Date
+    const dp=[{rx:/(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})/,f:'YMD'},{rx:/(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})/,f:'MDY'},{rx:/(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2})(?!\d)/,f:'MD2'},{rx:/(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\w*\s+(\d{1,2}),?\s+(\d{4})/i,f:'MMM'}];
+    const mo={jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12};
+    for(const{rx,f}of dp){const m=txt.match(rx);if(m){let y,mn,d;
+      if(f==='YMD'){y=m[1];mn=m[2];d=m[3]}else if(f==='MDY'){mn=m[1];d=m[2];y=m[3]}else if(f==='MD2'){mn=m[1];d=m[2];y='20'+m[3]}else{mn=mo[m[1].toLowerCase().substring(0,3)];d=m[2];y=m[3]}
+      y=+y;mn=+mn;d=+d;if(mn>12){const t=mn;mn=d;d=t}
+      if(y>2000&&y<=new Date().getFullYear()+1&&mn>=1&&mn<=12&&d>=1&&d<=31){R.date=`${y}-${String(mn).padStart(2,'0')}-${String(d).padStart(2,'0')}`;R.found.date=true;break}
+    }}
+
+    let c=Math.min(ocrConf||50,100),b=0;if(R.found.total)b+=20;if(R.found.tax)b+=20;if(R.found.store)b+=10;if(R.found.date)b+=10;
+    R.conf=Math.min(Math.round(c*.6+b),99);return R;
+  }
+};
+
+// ════════════════════════════════════════════════════════════
+//  POPULATE SELECTS
+// ════════════════════════════════════════════════════════════
+function initSelects(){
+  ['fProv','filtProv','setProv'].forEach(id=>{
+    const s=$(id);if(!s)return;
+    const isF=id==='filtProv';if(!isF)s.innerHTML='';
+    Object.entries(PROV).forEach(([c,p])=>{const o=document.createElement('option');o.value=c;o.textContent=`${p.name} (${p.lbl})`;s.appendChild(o)});
+  });
+  try{S.sets=JSON.parse(localStorage.getItem('ts_s')||'{}')}catch(e){}
+  if(!S.sets.defProv)S.sets.defProv='ON';
+  $('fProv').value=S.sets.defProv;$('setProv').value=S.sets.defProv;
+}
+function saveSets(){S.sets.defProv=$('setProv').value;localStorage.setItem('ts_s',JSON.stringify(S.sets));$('fProv').value=S.sets.defProv;toast('Settings saved','ok')}
+
+function renderRates(){
+  let h='';Object.entries(PROV).forEach(([c,p])=>{
+    const t=p.hst||(p.gst+p.pst+p.qst);
+    h+=`<div class="set-row"><span class="sl"><b>${c}</b> ${p.name}</span><span class="sv">${p.lbl} = ${t}%</span></div>`;
+  });$('ratesTable').innerHTML=h;
+}
+
+// ════════════════════════════════════════════════════════════
+//  DASHBOARD
+// ════════════════════════════════════════════════════════════
+function refreshDash(){
+  const y=S.yr;$('dashYr').textContent=y;
+  const yr=S.receipts.filter(r=>(r.receiptDate||r.dateUploaded||'').startsWith(String(y)));
+  const n=yr.length,exp=yr.reduce((s,r)=>s+(r.totalAmount||0),0),tax=yr.reduce((s,r)=>s+(r.taxAmount||0),0);
+  $('sRec').textContent=n;$('sExp').textContent=fmt(exp);$('sTax').textContent=fmt(tax);$('sAvg').textContent=fmt(n?exp/n:0);
+
+  // Province
+  const bp={};yr.forEach(r=>{if(r.province){if(!bp[r.province])bp[r.province]={n:0,tax:0,tot:0};bp[r.province].n++;bp[r.province].tax+=r.taxAmount||0;bp[r.province].tot+=r.totalAmount||0}});
+  const pc=$('provChart');
+  if(!Object.keys(bp).length){pc.innerHTML='<div style="text-align:center;padding:20px;color:var(--text3);font-size:.85rem">No data for '+y+'</div>'}
+  else{const mx=Math.max(...Object.values(bp).map(v=>v.tot));let h='';Object.entries(bp).sort((a,b)=>b[1].tot-a[1].tot).forEach(([c,d])=>{
+    h+=`<div class="prov-row"><span class="prov-code">${c}</span><div class="prov-track"><div class="prov-fill" style="width:${mx?d.tot/mx*100:0}%"></div></div><span class="prov-val">${fmt(d.tax)} tax</span></div>`;
+  });pc.innerHTML=h}
+
+  // Recent
+  const rl=$('recentList'),rc=S.receipts.slice(0,5);
+  rl.innerHTML=rc.length?rc.map(rcHTML).join(''):'<div class="empty"><div class="e-ico">🧾</div><h3>No receipts yet</h3><p>Tap the camera button to start</p></div>';
+}
+function chgYr(d){S.yr+=d;refreshDash()}
+
+function rcHTML(r){
+  const th=r.imageThumb||r.imageUrl||r.imageData;const p=PROV[r.province];
+  return`<div class="rc" onclick="showDetail('${r.id}')">
+    <div class="rc-thumb">${th?`<img src="${th}" loading="lazy">`:'🧾'}</div>
+    <div class="rc-info"><div class="rc-store">${esc(r.storeName||'Unknown')}</div>
+    <div class="rc-meta">${fmtD(r.receiptDate)}<span class="dot"></span>${r.province||'—'}<span class="dot"></span>${CAT_LBL[r.category]||''}</div></div>
+    <div class="rc-right"><div class="rc-total">${fmt(r.totalAmount)}</div><div class="rc-tax">${fmt(r.taxAmount)} tax</div><div class="rc-badge">${p?p.type:'TAX'}</div></div>
+  </div>`;
+}
+
+// ════════════════════════════════════════════════════════════
+//  SCANNER
+// ════════════════════════════════════════════════════════════
+function initScan(){
+  $('camIn').addEventListener('change',handleFile);
+  $('fileIn').addEventListener('change',handleFile);
+  const dz=$('dropZone');
+  dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('hover')});
+  dz.addEventListener('dragleave',()=>dz.classList.remove('hover'));
+  dz.addEventListener('drop',e=>{e.preventDefault();dz.classList.remove('hover');if(e.dataTransfer.files.length)processFile(e.dataTransfer.files[0])});
+  $('fDate').value=new Date().toISOString().split('T')[0];
+}
+
+function handleFile(e){const f=e.target.files[0];if(f)processFile(f);e.target.value=''}
+
+async function processFile(f){
+  if(!f.type.startsWith('image/')){toast('Please select an image','err');return}
+  const reader=new FileReader();
+  reader.onload=async e=>{
+    S.imgData=e.target.result;$('prevImg').src=S.imgData;
+    $('dropZone').style.display='none';$('ocrProg').classList.add('on');$('prevSec').classList.add('on');
+    try{const r=await OCR.run(S.imgData);fillForm(r)}catch(e){toast('OCR failed — enter manually','warn');fillForm({raw:'',store:'',total:0,date:'',conf:0,found:{}})}
+    $('ocrProg').classList.remove('on');
+  };reader.readAsDataURL(f);
+}
+
+function fillForm(r){
+  if(r.store)$('fStore').value=r.store;
+  if(r.date)$('fDate').value=r.date;
+  if(r.total>0)$('fTotal').value=r.total.toFixed(2);
+  if(r.sub>0)$('fSub').value=r.sub.toFixed(2);
+  $('ocrRaw').textContent=r.raw||'(No text)';
+  $('fTaxOverride').value='';
+
+  const c=r.conf||0,d=$('confDot'),l=$('confLbl'),ds=$('confDesc'),p=$('confPct');
+  p.textContent=c+'%';
+  if(c>=70){d.className='conf-dot hi';l.textContent='High Confidence';ds.textContent='Values look good — verify before saving'}
+  else if(c>=40){d.className='conf-dot md';l.textContent='Medium Confidence';ds.textContent='Some values detected — review carefully'}
+  else{d.className='conf-dot lo';l.textContent='Low Confidence';ds.textContent='Limited detection — enter details manually'}
+  calcTax();
+}
+
+function calcTax(){
+  const t=parseFloat($('fTotal').value)||0,pc=$('fProv').value;
+  if(t<=0||!pc){updateTaxUI(0,0,0,0,pc);return}
+  const c=Tax.fromTotal(t,pc);$('fSub').value=c.sub.toFixed(2);
+  updateTaxUI(c.gst,c.pst,c.qst,c.hst,pc);
+}
+
+function calcFromSub(){
+  const s=parseFloat($('fSub').value)||0,pc=$('fProv').value;
+  if(s<=0||!pc)return;const c=Tax.fromSub(s,pc);$('fTotal').value=c.total.toFixed(2);
+  updateTaxUI(c.gst,c.pst,c.qst,c.hst,pc);
+}
+
+function updateTaxUI(g,ps,q,h,pc){
+  const p=PROV[pc];if(!p)return;let tot=0;
+  const r1=$('tr1'),r2=$('tr2'),rt=$('trT');
+  if(p.type==='HST'){r1.innerHTML=`<span>HST (${p.hst}%)</span><span>${fmt(h)}</span>`;r2.style.display='none';tot=h}
+  else if(p.type==='GST+PST'){r1.innerHTML=`<span>GST (${p.gst}%)</span><span>${fmt(g)}</span>`;r2.innerHTML=`<span>PST (${p.pst}%) <span class="note">not claimable as ITC</span></span><span>${fmt(ps)}</span>`;r2.style.display='flex';tot=g+ps}
+  else if(p.type==='GST+QST'){r1.innerHTML=`<span>GST (${p.gst}%)</span><span>${fmt(g)}</span>`;r2.innerHTML=`<span>QST (${p.qst}%) <span class="note">claim on QC return</span></span><span>${fmt(q)}</span>`;r2.style.display='flex';tot=g+q}
+  else{r1.innerHTML=`<span>GST (${p.gst}%)</span><span>${fmt(g)}</span>`;r2.style.display='none';tot=g}
+  rt.innerHTML=`<span>Total Tax</span><span>${fmt(tot)}</span>`;
+}
+
+async function saveReceipt(){
+  const store=$('fStore').value.trim(),date=$('fDate').value,pc=$('fProv').value;
+  const total=parseFloat($('fTotal').value)||0,sub=parseFloat($('fSub').value)||0;
+  const cat=$('fCat').value,notes=$('fNotes').value.trim();
+  const taxOvr=$('fTaxOverride').value.trim();
+  if(!store){toast('Enter store name','err');return}
+  if(!date){toast('Select a date','err');return}
+  if(total<=0){toast('Enter a valid total','err');return}
+
+  const c=Tax.fromTotal(total,pc);const p=PROV[pc];
+
+  let finalTax=c.tax,finalGST=c.gst,finalPST=c.pst,finalQST=c.qst,finalHST=c.hst;
+  if(taxOvr!==''){
+    const ov=parseFloat(taxOvr)||0;
+    finalTax=r2(ov);
+    if(p.type==='HST'){finalHST=ov;finalGST=0;finalPST=0;finalQST=0}
+    else if(p.type==='GST+PST'){const ratio=p.gst/(p.gst+p.pst);finalGST=r2(ov*ratio);finalPST=r2(ov*(1-ratio));finalQST=0;finalHST=0}
+    else if(p.type==='GST+QST'){const ratio=p.gst/(p.gst+p.qst);finalGST=r2(ov*ratio);finalQST=r2(ov*(1-ratio));finalPST=0;finalHST=0}
+    else{finalGST=ov;finalPST=0;finalQST=0;finalHST=0}
+  }
+
+  const receipt={
+    dateUploaded:new Date().toISOString(),receiptDate:date,storeName:store,
+    totalAmount:r2(total),subtotal:r2(sub||c.sub),
+    taxAmount:r2(finalTax),gstAmount:r2(finalGST),pstAmount:r2(finalPST),qstAmount:r2(finalQST),hstAmount:r2(finalHST),
+    taxType:c.type,taxRate:c.rate,province:pc,category:cat,notes,imageData:S.imgData,imageUrl:''
+  };
+
+  const btn=$('saveBtn');btn.disabled=true;btn.textContent='⏳ Saving...';
+  try{await Data.save(receipt);toast('Receipt saved! 🎉','ok');resetScan();go('dashboard')}catch(e){toast('Save error','err')}
+  btn.disabled=false;btn.textContent='💾 Save Receipt';
+}
+
+function resetScan(){
+  $('dropZone').style.display='';$('prevSec').classList.remove('on');$('ocrProg').classList.remove('on');
+  $('ocrRaw').classList.remove('on');$('fStore').value='';$('fDate').value=new Date().toISOString().split('T')[0];
+  $('fTotal').value='';$('fSub').value='';$('fNotes').value='';$('fCat').value='general';$('fTaxOverride').value='';
+  $('fProv').value=S.sets.defProv||'ON';S.imgData=null;calcTax();
+}
+
+// ════════════════════════════════════════════════════════════
+//  HISTORY
+// ════════════════════════════════════════════════════════════
+function refreshHist(){
+  const fl=getFiltered();$('resCt').textContent=`${fl.length} receipt${fl.length!==1?'s':''}`;
+  $('histList').innerHTML=fl.length?fl.map(rcHTML).join(''):'<div class="empty"><div class="e-ico">🔍</div><h3>No receipts found</h3><p>Adjust filters or scan a new receipt</p></div>';
+}
+function getFiltered(){
+  const f=$('filtFrom').value,t=$('filtTo').value,p=$('filtProv').value,c=$('filtCat').value;
+  return S.receipts.filter(r=>{const d=r.receiptDate||r.dateUploaded?.split('T')[0]||'';if(f&&d<f)return false;if(t&&d>t)return false;if(p&&r.province!==p)return false;if(c&&r.category!==c)return false;return true});
+}
+function applyFilt(){refreshHist()}
+
+// ════════════════════════════════════════════════════════════
+//  RECEIPT DETAIL & EDIT
+// ════════════════════════════════════════════════════════════
+function showDetail(id){
+  const r=S.receipts.find(x=>x.id===id);if(!r)return;
+  const p=PROV[r.province],img=r.imageUrl||r.imageData||r.imageThumb,itc=Tax.itc(r);
+  $('detailTitle').textContent=r.storeName||'Receipt Details';
+  $('detailBody').innerHTML=`
+    ${img?`<div class="d-img"><img src="${img}"></div>`:''}
+    <div class="d-grid">
+      <div class="d-item full"><label>Store</label><div class="val">${esc(r.storeName||'Unknown')}</div></div>
+      <div class="d-item"><label>Date</label><div class="val">${fmtD(r.receiptDate)}</div></div>
+      <div class="d-item"><label>Province</label><div class="val">${r.province} — ${p?p.name:''}</div></div>
+      <div class="d-item"><label>Subtotal</label><div class="val">${fmt(r.subtotal)}</div></div>
+      <div class="d-item"><label>Total</label><div class="val" style="font-size:1.25rem;color:var(--primary-mid)">${fmt(r.totalAmount)}</div></div>
+      <div class="d-item full"><label>Tax Breakdown (${r.taxType||'N/A'})</label>
+        <div class="tax-box" style="margin-top:8px">
+          ${r.hstAmount>0?`<div class="tax-row"><span>HST (${p?.hst||''}%)</span><span>${fmt(r.hstAmount)}</span></div>`:''}
+          ${r.gstAmount>0?`<div class="tax-row"><span>GST (5%)</span><span>${fmt(r.gstAmount)}</span></div>`:''}
+          ${r.pstAmount>0?`<div class="tax-row"><span>PST (${p?.pst||''}%)</span><span>${fmt(r.pstAmount)}</span></div>`:''}
+          ${r.qstAmount>0?`<div class="tax-row"><span>QST (${p?.qst||''}%)</span><span>${fmt(r.qstAmount)}</span></div>`:''}
+          <div class="tax-row total"><span>Total Tax</span><span>${fmt(r.taxAmount)}</span></div>
+        </div>
+      </div>
+      <div class="d-item full itc-box"><label>💡 Claimable ITC (Federal)</label><div class="val">${fmt(itc)}</div>
+        ${r.taxType==='GST+PST'?'<div class="itc-note" style="color:var(--amber)">PST not recoverable on federal return</div>':''}
+        ${r.taxType==='GST+QST'?'<div class="itc-note" style="color:var(--primary-blue)">QST claimable on Quebec return separately</div>':''}
+      </div>
+      ${r.category?`<div class="d-item"><label>Category</label><div class="val">${CAT_LBL[r.category]||r.category}</div></div>`:''}
+      <div class="d-item"><label>Uploaded</label><div class="val" style="font-size:.82rem;font-weight:500">${r.dateUploaded?new Date(r.dateUploaded).toLocaleString('en-CA'):'N/A'}</div></div>
+      ${r.notes?`<div class="d-item full"><label>Notes</label><div class="val" style="font-size:.85rem;font-weight:400">${esc(r.notes)}</div></div>`:''}
+    </div>`;
+  $('detailFoot').innerHTML=`
+    <button class="btn btn-d" onclick="delReceipt('${r.id}')" style="flex:1">🗑️ Delete</button>
+    <button class="btn btn-p" onclick="closeM('detailModal');openEdit('${r.id}')" style="flex:1">✏️ Edit</button>
+    <button class="btn btn-s" onclick="closeM('detailModal')" style="flex:1">Close</button>`;
+  openM('detailModal');
+}
+
+function openEdit(id){
+  const r=S.receipts.find(x=>x.id===id);if(!r)return;
+  const img=r.imageUrl||r.imageData||r.imageThumb;
+  let provOpts='';Object.entries(PROV).forEach(([c,p])=>{provOpts+=`<option value="${c}" ${c===r.province?'selected':''}>${p.name} (${p.lbl})</option>`});
+  let catOpts='';Object.entries(CAT_LBL).forEach(([v,l])=>{catOpts+=`<option value="${v}" ${v===r.category?'selected':''}>${l}</option>`});
+
+  $('editBody').innerHTML=`
+    ${img?`<div class="d-img" style="margin-bottom:20px"><img src="${img}"></div>`:''}
+    <div class="edit-grid">
+      <div class="fg full"><label>Store / Merchant</label><input type="text" id="eStore" value="${esc(r.storeName||'')}"></div>
+      <div class="fg"><label>Receipt Date</label><input type="date" id="eDate" value="${r.receiptDate||''}"></div>
+      <div class="fg"><label>Province</label><select id="eProv" onchange="editCalcTax()">${provOpts}</select></div>
+      <div class="fg"><label>Total (incl. tax)</label><div class="prefix"><input type="number" step="0.01" min="0" id="eTotal" value="${r.totalAmount||''}" oninput="editCalcTax()"></div></div>
+      <div class="fg"><label>Subtotal</label><div class="prefix"><input type="number" step="0.01" min="0" id="eSub" value="${r.subtotal||''}" oninput="editCalcFromSub()"></div></div>
+      <div class="fg"><label>Category</label><select id="eCat">${catOpts}</select></div>
+      <div class="fg"><label>Tax Override</label><div class="prefix"><input type="number" step="0.01" min="0" id="eTaxOvr" placeholder="Leave empty for auto" title="Override the calculated tax amount"></div></div>
+      <div class="fg full"><label>GST Amount</label><div class="prefix"><input type="number" step="0.01" min="0" id="eGST" value="${r.gstAmount||0}" oninput="editManualTax()"></div></div>
+      <div class="fg"><label>HST Amount</label><div class="prefix"><input type="number" step="0.01" min="0" id="eHST" value="${r.hstAmount||0}" oninput="editManualTax()"></div></div>
+      <div class="fg"><label>PST Amount</label><div class="prefix"><input type="number" step="0.01" min="0" id="ePST" value="${r.pstAmount||0}" oninput="editManualTax()"></div></div>
+      <div class="fg"><label>QST Amount</label><div class="prefix"><input type="number" step="0.01" min="0" id="eQST" value="${r.qstAmount||0}" oninput="editManualTax()"></div></div>
+      <div class="fg"><label>Total Tax</label><div class="prefix"><input type="number" step="0.01" min="0" id="eTaxTotal" value="${r.taxAmount||0}" readonly style="font-weight:700;background:var(--green-light)"></div></div>
+      <div class="fg full"><label>Notes</label><textarea id="eNotes" rows="2">${esc(r.notes||'')}</textarea></div>
+    </div>
+    <div style="margin-top:12px;padding:12px 14px;background:var(--primary-pale);border-radius:var(--r-sm);font-size:.78rem;color:var(--primary-mid)">
+      💡 <b>Tip:</b> You can directly edit any tax amount field. Change the province or total to auto-recalculate, or manually override individual amounts.
+    </div>`;
+
+  $('editFoot').innerHTML=`
+    <button class="btn btn-s" onclick="closeM('editModal')" style="flex:1">Cancel</button>
+    <button class="btn btn-g" onclick="saveEdit('${r.id}')" style="flex:2">✅ Save Changes</button>`;
+  openM('editModal');
+}
+
+function editCalcTax(){
+  const t=parseFloat($('eTotal').value)||0,pc=$('eProv').value;if(t<=0)return;
+  const c=Tax.fromTotal(t,pc);
+  $('eSub').value=c.sub.toFixed(2);$('eGST').value=c.gst.toFixed(2);$('eHST').value=c.hst.toFixed(2);
+  $('ePST').value=c.pst.toFixed(2);$('eQST').value=c.qst.toFixed(2);$('eTaxTotal').value=c.tax.toFixed(2);
+}
+
+function editCalcFromSub(){
+  const s=parseFloat($('eSub').value)||0,pc=$('eProv').value;if(s<=0)return;
+  const c=Tax.fromSub(s,pc);
+  $('eTotal').value=c.total.toFixed(2);$('eGST').value=c.gst.toFixed(2);$('eHST').value=c.hst.toFixed(2);
+  $('ePST').value=c.pst.toFixed(2);$('eQST').value=c.qst.toFixed(2);$('eTaxTotal').value=c.tax.toFixed(2);
+}
+
+function editManualTax(){
+  const g=parseFloat($('eGST').value)||0,h=parseFloat($('eHST').value)||0;
+  const p=parseFloat($('ePST').value)||0,q=parseFloat($('eQST').value)||0;
+  $('eTaxTotal').value=(g+h+p+q).toFixed(2);
+}
+
+async function saveEdit(id){
+  const store=$('eStore').value.trim(),date=$('eDate').value,prov=$('eProv').value;
+  const total=parseFloat($('eTotal').value)||0,sub=parseFloat($('eSub').value)||0;
+  const cat=$('eCat').value,notes=$('eNotes').value.trim();
+  const gst=parseFloat($('eGST').value)||0,hst=parseFloat($('eHST').value)||0;
+  const pst=parseFloat($('ePST').value)||0,qst=parseFloat($('eQST').value)||0;
+  const taxTotal=parseFloat($('eTaxTotal').value)||0;
+
+  if(!store){toast('Enter store name','err');return}
+  if(total<=0){toast('Enter valid total','err');return}
+
+  const p=PROV[prov];
+  const updates={
+    storeName:store,receiptDate:date,province:prov,
+    totalAmount:r2(total),subtotal:r2(sub),
+    gstAmount:r2(gst),hstAmount:r2(hst),pstAmount:r2(pst),qstAmount:r2(qst),
+    taxAmount:r2(taxTotal),taxType:p?p.type:'GST',taxRate:p?(p.hst||(p.gst+p.pst+p.qst)):5,
+    category:cat,notes
+  };
+
+  await Data.update(id,updates);
+  closeM('editModal');toast('Receipt updated! ✅','ok');
+  refreshDash();refreshHist();
+}
+
+async function delReceipt(id){
+  if(!confirm('Delete this receipt?'))return;
+  await Data.del(id);closeM('detailModal');toast('Deleted','ok');refreshDash();refreshHist();
+}
+
+// ════════════════════════════════════════════════════════════
+//  CSV EXPORT
+// ════════════════════════════════════════════════════════════
+function exportCSV(){
+  const fl=getFiltered();if(!fl.length){toast('No receipts to export','warn');return}
+  const hd=['Date','Store','Province','Category','Subtotal','Total','Tax Type','Tax Rate %','Total Tax','GST','HST','PST','QST','Claimable ITC','Notes','Uploaded'];
+  const rows=fl.map(r=>[r.receiptDate||'',`"${(r.storeName||'').replace(/"/g,'""')}"`,r.province||'',CAT_LBL[r.category]||r.category||'',(r.subtotal||0).toFixed(2),(r.totalAmount||0).toFixed(2),r.taxType||'',(r.taxRate||0).toFixed(3),(r.taxAmount||0).toFixed(2),(r.gstAmount||0).toFixed(2),(r.hstAmount||0).toFixed(2),(r.pstAmount||0).toFixed(2),(r.qstAmount||0).toFixed(2),Tax.itc(r).toFixed(2),`"${(r.notes||'').replace(/"/g,'""')}"`,r.dateUploaded||'']);
+  const tExp=fl.reduce((s,r)=>s+(r.totalAmount||0),0),tTax=fl.reduce((s,r)=>s+(r.taxAmount||0),0),tITC=fl.reduce((s,r)=>s+Tax.itc(r),0);
+  rows.push([]);rows.push(['TOTALS','','','','',tExp.toFixed(2),'','',tTax.toFixed(2),'','','','',tITC.toFixed(2),'','']);
+  const csv=[hd.join(','),...rows.map(r=>r.join(','))].join('\n');
+  const blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8;'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`TaxSnap_${new Date().toISOString().split('T')[0]}.csv`;a.click();
+  toast(`Exported ${fl.length} receipts`,'ok');
+}
+
+function clearAll(){if(confirm('⚠️ Delete ALL local data?\nThis cannot be undone.')){Data.clear();toast('Data cleared','ok');refreshDash();refreshHist()}}
+
+// ════════════════════════════════════════════════════════════
+//  MODAL BACKDROP
+// ════════════════════════════════════════════════════════════
+document.querySelectorAll('.modal-bg').forEach(m=>{m.addEventListener('click',e=>{if(e.target===m)closeM(m.id)})});
+
+// ════════════════════════════════════════════════════════════
+//  INIT
+// ════════════════════════════════════════════════════════════
+async function init(){
+  initFB();initSelects();renderRates();initScan();
+  await Data.load();refreshDash();
+  console.log('🍁 TaxSnap initialized |',S.receipts.length,'receipts |','Firebase:',S.fbOk?'ON':'OFF');
+}
+document.addEventListener('DOMContentLoaded',init);
+</script>
+</body>
+</html>
